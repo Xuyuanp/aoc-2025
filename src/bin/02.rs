@@ -34,6 +34,28 @@ impl IDRange {
 
         invalid_ids
     }
+
+    pub fn find_invalid_v2(&self) -> Vec<u64> {
+        let mut invalid_ids = Vec::new();
+        for id in self.start..=self.end {
+            let s = id.to_string();
+            let len = s.len();
+            if len < 2 {
+                continue;
+            }
+
+            for l in 1..=len / 2 {
+                if len % l == 0 {
+                    let pattern = &s[0..l];
+                    if pattern.repeat(len / l) == s {
+                        invalid_ids.push(id);
+                        break;
+                    }
+                }
+            }
+        }
+        invalid_ids
+    }
 }
 
 impl TryFrom<&str> for IDRange {
@@ -60,8 +82,14 @@ pub fn part_one(input: &str) -> Option<u64> {
     Some(res)
 }
 
-pub fn part_two(_input: &str) -> Option<u64> {
-    None
+pub fn part_two(input: &str) -> Option<u64> {
+    let res = input
+        .split(",")
+        .map(|s| IDRange::try_from(s).expect("invalid input"))
+        .map(|r| r.find_invalid_v2())
+        .flatten()
+        .sum();
+    Some(res)
 }
 
 #[cfg(test)]
@@ -77,6 +105,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(4174379265));
     }
 }
