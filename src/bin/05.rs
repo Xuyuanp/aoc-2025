@@ -46,17 +46,19 @@ impl DB {
 
     pub fn solution_v2(&mut self) -> u64 {
         self.ranges.sort_by(|r1, r2| r1.start.cmp(&r2.start));
-        let mut merged_ranges = vec![self.ranges[0].clone()];
+        let mut res = 0;
+        let mut last = self.ranges[0].clone();
         for r in self.ranges.iter().skip(1) {
-            let last = merged_ranges.last_mut().unwrap();
             if r.start <= last.end {
                 last.end = last.end.max(r.end);
             } else {
-                merged_ranges.push(r.clone());
+                res += last.end - last.start;
+                last = r.clone();
             }
         }
+        res += last.end - last.start;
 
-        merged_ranges.iter().map(|r| r.end - r.start).sum()
+        res
     }
 }
 
