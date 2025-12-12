@@ -3,15 +3,13 @@ advent_of_code::solution!(4);
 const PAPER: u8 = b'@';
 const REMOVED: u8 = b'x';
 
-pub struct Grid {
-    pub data: [[u8; 136]; 136],
-    pub m: usize,
-    pub n: usize,
+pub struct Grid<const N: usize> {
+    pub data: [[u8; N]; N],
 }
 
-impl Grid {
-    pub fn new(data: [[u8; 136]; 136], m: usize, n: usize) -> Self {
-        Self { data, m, n }
+impl<const N: usize> Grid<N> {
+    pub fn new(data: [[u8; N]; N]) -> Self {
+        Self { data }
     }
 
     pub fn neighbors(&self, row: usize, col: usize) -> Vec<(usize, usize)> {
@@ -25,11 +23,7 @@ impl Grid {
                 let new_row = row as isize + dr;
                 let new_col = col as isize + dc;
 
-                if new_row >= 0
-                    && new_row < self.m as isize
-                    && new_col >= 0
-                    && new_col < self.n as isize
-                {
+                if new_row >= 0 && new_row < N as isize && new_col >= 0 && new_col < N as isize {
                     result.push((new_row as usize, new_col as usize));
                 }
             }
@@ -57,8 +51,8 @@ impl Grid {
     pub fn solution(&self) -> u64 {
         let mut count = 0u64;
 
-        for i in 0..self.m {
-            for j in 0..self.n {
+        for i in 0..N {
+            for j in 0..N {
                 if self.accessable(i, j) {
                     count += 1;
                 }
@@ -71,8 +65,8 @@ impl Grid {
     pub fn solution_v2(&mut self) -> u64 {
         let mut count = 0u64;
 
-        for i in 0..self.m {
-            for j in 0..self.n {
+        for i in 0..N {
+            for j in 0..N {
                 if self.accessable(i, j) {
                     count += 1;
                     self.data[i][j] = REMOVED;
@@ -87,35 +81,37 @@ impl Grid {
     }
 }
 
-impl TryFrom<&str> for Grid {
+impl<const N: usize> TryFrom<&str> for Grid<N> {
     type Error = &'static str;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let mut data = [[0u8; 136]; 136];
-        let mut m = 0;
-        let mut n = 0;
+        let mut data = [[0u8; N]; N];
 
         for (i, line) in value.lines().enumerate() {
-            m = i + 1;
             let bytes = line.as_bytes();
-            n = bytes.len();
             for (j, &b) in bytes.iter().enumerate() {
                 data[i][j] = b;
             }
         }
 
-        Ok(Self::new(data, m, n))
+        Ok(Self::new(data))
     }
 }
 
+#[cfg(test)]
+const N: usize = 10;
+
+#[cfg(not(test))]
+const N: usize = 136;
+
 pub fn part_one(input: &str) -> Option<u64> {
-    let grid = Grid::try_from(input).expect("Failed to parse grid");
+    let grid: Grid<N> = Grid::try_from(input).expect("Failed to parse grid");
 
     Some(grid.solution())
 }
 
 pub fn part_two(input: &str) -> Option<u64> {
-    let mut grid = Grid::try_from(input).expect("Failed to parse grid");
+    let mut grid: Grid<N> = Grid::try_from(input).expect("Failed to parse grid");
 
     Some(grid.solution_v2())
 }
