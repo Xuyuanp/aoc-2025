@@ -188,6 +188,212 @@ impl Machine {
 
         min_presses
     }
+
+    pub fn fewest_buttons_part_two(&self) -> u64 {
+        let n_equations = self.joltages.len();
+        let n_vars = self.buttons.len();
+
+        // Build augmented matrix [A | b] using f64 for calculations
+        // A[i][j] = 1.0 if button j affects counter i
+        // b[i] = target[i]
+        let mut mat = vec![vec![0.0; n_vars + 1]; n_equations];
+
+        for (j, button) in self.buttons.iter().enumerate() {
+            for &counter_idx in button {
+                if counter_idx < n_equations {
+                    mat[counter_idx][j] = 1.0;
+                }
+            }
+        }
+
+        for (i, &target) in self.joltages.iter().enumerate() {
+            mat[i][n_vars] = target as f64;
+        }
+
+        // Gaussian Elimination to RREF
+        let mut pivot_row = 0;
+        let mut pivot_cols = vec![None; n_equations];
+        let mut free_vars = Vec::new();
+
+        const EPSILON: f64 = 1e-9;
+
+        for col in 0..n_vars {
+            if pivot_row >= n_equations {
+                free_vars.push(col);
+                continue;
+            }
+
+            // Find pivot
+            let mut pivot = None;
+            for row in pivot_row..n_equations {
+                if mat[row][col].abs() > EPSILON {
+                    pivot = Some(row);
+                    break;
+                }
+            }
+
+            match pivot {
+                Some(row) => {
+                    mat.swap(pivot_row, row);
+
+                    // Normalize pivot row
+                    let divisor = mat[pivot_row][col];
+                    for k in col..=n_vars {
+                        mat[pivot_row][k] /= divisor;
+                    }
+
+                    // Eliminate other rows
+                    for r in 0..n_equations {
+                        if r != pivot_row && mat[r][col].abs() > EPSILON {
+                            let factor = mat[r][col];
+                            for k in col..=n_vars {
+                                mat[r][k] -= factor * mat[pivot_row][k];
+                            }
+                        }
+                    }
+
+                    pivot_cols[pivot_row] = Some(col);
+                    pivot_row += 1;
+                }
+                None => {
+                    free_vars.push(col);
+                }
+            }
+        }
+
+        // Check for inconsistency (0 = non-zero)
+        for row in pivot_row..n_equations {
+            if mat[row][n_vars].abs() > EPSILON {
+                // No solution
+                return 0; // Or handle error appropriately
+            }
+        }
+
+        // Calculate upper bounds for free variables based on constraints
+        // x_j <= b_i / A_ij for all i where A_ij > 0.
+        // Since A_ij = 1, x_j <= min(b_i) for affected i.
+        let mut free_bounds = Vec::new();
+        for &col in &free_vars {
+            let mut bound = u64::MAX;
+            for &row in &self.buttons[col] {
+                if row < self.joltages.len() {
+                    bound = bound.min(self.joltages[row] as u64);
+                }
+            }
+            if bound == u64::MAX {
+                bound = 0;
+            }
+            free_bounds.push(bound);
+        }
+
+        let mut min_total = u64::MAX;
+
+        Self::search_recursive(
+            &mat,
+            &pivot_cols,
+            &free_vars,
+            &free_bounds,
+            0,
+            vec![0; n_vars],
+            &mut min_total,
+            n_vars,
+        );
+
+        if min_total == u64::MAX {
+            panic!("No solution found for machine");
+        } else {
+            min_total
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn search_recursive(
+        mat: &[Vec<f64>],
+        pivot_cols: &[Option<usize>],
+        free_vars: &[usize],
+        free_bounds: &[u64],
+        idx: usize,
+        mut solution: Vec<i64>,
+        min_total: &mut u64,
+        n_vars: usize,
+    ) {
+        // Pruning based on current sum of free vars?
+        // Pivot vars also add to sum, so partial sum is lower bound.
+        let current_sum: u64 = solution.iter().map(|&x| x as u64).sum();
+        if current_sum >= *min_total {
+            return;
+        }
+
+        if idx == free_vars.len() {
+            // All free variables set, solve for pivot variables
+            // x_pivot = b - sum(x_free * A_free)
+            // In RREF, mat[row][pivot_col] is 1.
+
+            let mut valid = true;
+            let mut total_presses = current_sum;
+            let n_augmented = mat[0].len(); // last col is b
+
+            // We need to iterate rows to find pivots.
+            // But we have pivot_cols mapping row -> col.
+            // Iterate rows 0..n_equations.
+
+            // Wait, we need to find the row that corresponds to a pivot.
+            // pivot_cols[row] gives the pivot column for that row.
+
+            for (row, &p_col_opt) in pivot_cols.iter().enumerate() {
+                if p_col_opt.is_some() {
+                    let mut val = mat[row][n_augmented - 1]; // b is at last column
+
+                    // Subtract free variable contributions
+                    for &f_col in free_vars {
+                        let coeff = mat[row][f_col];
+                        if coeff.abs() > 1e-9 {
+                            val -= coeff * solution[f_col] as f64;
+                        }
+                    }
+
+                    // Pivot variable must be integer and non-negative
+                    if val < -0.001 {
+                        valid = false;
+                        break;
+                    }
+
+                    let rounded = val.round();
+                    if (val - rounded).abs() > 0.001 {
+                        valid = false;
+                        break;
+                    }
+
+                    let int_val = rounded as i64;
+                    // solution[p_col] = int_val; // Don't need to store if just summing
+                    total_presses += int_val as u64;
+                }
+            }
+
+            if valid && total_presses < *min_total {
+                *min_total = total_presses;
+            }
+            return;
+        }
+
+        let col = free_vars[idx];
+        let bound = free_bounds[idx];
+
+        // Iterate 0..=bound
+        for val in 0..=bound {
+            solution[col] = val as i64;
+            Self::search_recursive(
+                mat,
+                pivot_cols,
+                free_vars,
+                free_bounds,
+                idx + 1,
+                solution.clone(),
+                min_total,
+                n_vars,
+            );
+        }
+    }
 }
 
 pub fn part_one(input: &str) -> Option<u64> {
@@ -199,8 +405,13 @@ pub fn part_one(input: &str) -> Option<u64> {
     Some(res)
 }
 
-pub fn part_two(_input: &str) -> Option<u64> {
-    None
+pub fn part_two(input: &str) -> Option<u64> {
+    let res = input
+        .lines()
+        .map(|line| Machine::try_from(line).unwrap())
+        .map(|machine| machine.fewest_buttons_part_two())
+        .sum();
+    Some(res)
 }
 
 #[cfg(test)]
@@ -236,6 +447,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(33));
     }
 }
